@@ -9,56 +9,48 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# إعدادات رتب التحقق والالوان
+# إعدادات رتب التحقق والألوان
 VERIFY_ROLE_NAME = "Uun"
 VERIFY_EMOJI = "〰️"
-COLOR_ROLES = {
-    "white_btn": "w",
-    "red_btn": "r",
-    "green_btn": "g",
-    "purple_btn": "p"
-}
 
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user.name} | Systems Active")
-
-# --- كلاس الأزرار للألوان ---
-class ColorView(discord.ui.View):
+# --- كلاس القائمة المنسدلة للألوان ---
+class ColorSelect(discord.ui.Select):
     def __init__(self):
-        super().__init__(timeout=None) # الأزرار تبقى شابة دائماً
+        options = [
+            discord.SelectOption(label="White", description="Change your name color to White", emoji="⚪", value="w"),
+            discord.SelectOption(label="Red", description="Change your name color to Red", emoji="🔴", value="r"),
+            discord.SelectOption(label="Green", description="Change your name color to Green", emoji="🟢", value="g"),
+            discord.SelectOption(label="Purple", description="Change your name color to Purple", emoji="🟣", value="p"),
+        ]
+        super().__init__(placeholder="Choose your favorite color...", min_values=1, max_values=1, options=options)
 
-    async def handle_color(self, interaction: discord.Interaction, role_name: str):
+    async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        role = discord.utils.get(guild.roles, name=role_name)
+        selected_role_name = self.values[0]
+        role = discord.utils.get(guild.roles, name=selected_role_name)
         
         if not role:
-            await interaction.response.send_message(f"Role '{role_name}' not found!", ephemeral=True)
+            await interaction.response.send_message(f"Role '{selected_role_name}' not found in server settings!", ephemeral=True)
             return
 
-        # سحب الألوان القديمة (عشان يختار لون واحد بس)
-        roles_to_remove = [discord.utils.get(guild.roles, name=r) for r in COLOR_ROLES.values()]
-        roles_to_remove = [r for r in roles_to_remove if r in interaction.user.roles]
+        # قائمة بكل رتب الألوان الممكنة لمسح القديم منها
+        all_color_names = ["w", "r", "g", "p"]
+        roles_to_remove = [discord.utils.get(guild.roles, name=n) for n in all_color_names]
+        roles_to_remove = [r for r in roles_to_remove if r and r in interaction.user.roles]
         
-        await interaction.user.remove_roles(*roles_to_remove)
-        await interaction.user.add_roles(role)
-        await interaction.response.send_message(f"✅ Your color has been updated to: **{role_name.upper()}**", ephemeral=True)
+        try:
+            if roles_to_remove:
+                await interaction.user.remove_roles(*roles_to_remove)
+            
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ Your color has been updated to: **{role.name.upper()}**", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ I don't have permission to manage your roles. Check my role position!", ephemeral=True)
 
-    @discord.ui.button(label="White", style=discord.ButtonStyle.secondary, custom_id="white_btn")
-    async def white_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_color(interaction, "w")
-
-    @discord.ui.button(label="Red", style=discord.ButtonStyle.danger, custom_id="red_btn")
-    async def red_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_color(interaction, "r")
-
-    @discord.ui.button(label="Green", style=discord.ButtonStyle.success, custom_id="green_btn")
-    async def green_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_color(interaction, "g")
-
-    @discord.ui.button(label="Purple", style=discord.ButtonStyle.primary, custom_id="purple_btn")
-    async def purple_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_color(interaction, "p")
+class ColorView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ColorSelect())
 
 # --- الأوامر ---
 
@@ -81,18 +73,18 @@ async def uun_setup(ctx):
 @commands.has_permissions(administrator=True)
 async def color_setup(ctx):
     embed = discord.Embed(
-        title="🎨 Identity Colors",
+        title="🎨 Pick Your Identity Color",
         description=(
-            "Personalize your profile by choosing your name color below.\n"
-            "*Note: You can only have one active color at a time.*"
+            "Click the menu below to select your unique name color.\n"
+            "**Note:** Selecting a new color will replace your current one."
         ),
-        color=0x2b2d31 # لون غامق فخم
+        color=0x2b2d31
     )
     embed.set_footer(text="Uun Community • Color System")
     await ctx.send(embed=embed, view=ColorView())
     await ctx.message.delete()
 
-# نظام الرياكشن للتحقق
+# نظام الرياكشن للتحقق (Uun)
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.member.bot: return
@@ -102,5 +94,9 @@ async def on_raw_reaction_add(payload):
         if role:
             try: await payload.member.add_roles(role)
             except: pass
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user.name} | Systems Active")
 
 bot.run(os.getenv('DISCORD_TOKEN'))
